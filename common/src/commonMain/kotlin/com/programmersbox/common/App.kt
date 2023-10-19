@@ -3,16 +3,15 @@ package com.programmersbox.common
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
+import java.text.NumberFormat
 
 @Composable
 internal fun App() {
@@ -31,6 +30,8 @@ internal fun App() {
 internal fun SalaryUI() {
     val salaryData = remember { SalaryData() }
 
+    val numberFormatter = remember { NumberFormat.getCurrencyInstance() }
+
     var showPerAmount by remember { mutableStateOf(false) }
 
     if (showPerAmount) {
@@ -39,7 +40,9 @@ internal fun SalaryUI() {
         ) {
             FlowRow(
                 horizontalArrangement = Arrangement.SpaceEvenly,
-                modifier = Modifier.padding(horizontal = 2.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp)
             ) {
                 PerAmount.entries.forEach {
                     ElevatedFilterChip(
@@ -55,50 +58,31 @@ internal fun SalaryUI() {
         }
     }
 
-    BottomSheetScaffold(
+    Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Salary Calculator") }
             )
-        },
-        sheetContent = {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier.padding(horizontal = 2.dp)
-            ) {
-                item {}
-                item { Text("Unadjusted") }
-                item { Text("Adjusted") }
-                salaryData.amounts.infoMap().forEach {
-                    item { Text(it.first.name) }
-                    item {
-                        Text("$" + it.second.unadjusted.roundToInt().toString())
-                    }
-                    item {
-                        Text(
-                            "$" + it.second.adjusted.roundToInt().toString(),
-                        )
-                    }
-                }
-            }
         }
     ) { padding ->
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
+            modifier = Modifier.padding(padding)
         ) {
             Row(
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 NumberField(
                     salaryData.amount,
                     onValueChange = { salaryData.amount = it },
-                    labelText = "Amount"
+                    labelText = "Amount",
+                    prefix = { Text("$") }
                 )
 
-                ElevatedAssistChip(
+                Spacer(Modifier.width(20.dp))
+
+                AssistChip(
                     onClick = { showPerAmount = true },
                     label = { Text(salaryData.perAmount.name) }
                 )
@@ -131,6 +115,35 @@ internal fun SalaryUI() {
                 labelText = "Vacation Days per Year",
                 modifier = Modifier.fillMaxWidth()
             )
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.padding(horizontal = 2.dp)
+            ) {
+                item {}
+                item { Text("Unadjusted", textAlign = TextAlign.Center) }
+                item { Text("Adjusted", textAlign = TextAlign.Center) }
+                salaryData.amounts.infoMap().forEach {
+                    item {
+                        Text(
+                            it.first.name,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    item {
+                        Text(
+                            numberFormatter.format(it.second.unadjusted),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    item {
+                        Text(
+                            numberFormatter.format(it.second.adjusted),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -141,11 +154,13 @@ fun NumberField(
     onValueChange: (Double?) -> Unit,
     labelText: String,
     modifier: Modifier = Modifier,
+    prefix: @Composable (() -> Unit)? = null,
 ) {
     OutlinedTextField(
         value?.toString().orEmpty(),
         onValueChange = { v -> onValueChange(v.toDoubleOrNull()) },
         label = { Text(labelText) },
+        prefix = prefix,
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Decimal
         ),
@@ -159,10 +174,12 @@ fun NumberField(
     onValueChange: (Int?) -> Unit,
     labelText: String,
     modifier: Modifier = Modifier,
+    prefix: @Composable (() -> Unit)? = null,
 ) {
     OutlinedTextField(
         value?.toString().orEmpty(),
         onValueChange = { v -> onValueChange(v.toIntOrNull()) },
+        prefix = prefix,
         label = { Text(labelText) },
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Number
@@ -172,7 +189,7 @@ fun NumberField(
 }
 
 class SalaryData {
-    var perAmount by mutableStateOf(PerAmount.Hour)
+    var perAmount by mutableStateOf(PerAmount.Hourly)
     var amount by mutableStateOf<Double?>(50.0)
     var hoursPerWeek by mutableStateOf<Double?>(40.0)
     var daysPerWeek by mutableStateOf<Int?>(5)
@@ -189,7 +206,7 @@ class SalaryData {
 
             val offDays = holidaysPerYear + vacationDaysPerYear
             when (perAmount) {
-                PerAmount.Hour -> {
+                PerAmount.Hourly -> {
                     SalaryResults(
                         hourly = Adjustments(
                             unadjusted = amount
@@ -219,7 +236,7 @@ class SalaryData {
                     )
                 }
 
-                PerAmount.Day -> {
+                PerAmount.Daily -> {
                     SalaryResults(
                         hourly = Adjustments(
                             unadjusted = amount / (hoursPerWeek / daysPerWeek)
@@ -249,7 +266,7 @@ class SalaryData {
                     )
                 }
 
-                PerAmount.Week -> {
+                PerAmount.Weekly -> {
                     SalaryResults(
                         hourly = Adjustments(
                             unadjusted = amount / hoursPerWeek
@@ -279,7 +296,7 @@ class SalaryData {
                     )
                 }
 
-                PerAmount.BiWeek -> {
+                PerAmount.BiWeekly -> {
                     SalaryResults(
                         hourly = Adjustments(
                             unadjusted = amount / 2 / hoursPerWeek
@@ -309,7 +326,7 @@ class SalaryData {
                     )
                 }
 
-                PerAmount.SemiMonth -> {
+                PerAmount.SemiMonthly -> {
                     val hourly = amount / (hoursPerWeek * 52 / 24)
                     SalaryResults(
                         hourly = Adjustments(
@@ -340,7 +357,7 @@ class SalaryData {
                     )
                 }
 
-                PerAmount.Month -> {
+                PerAmount.Monthly -> {
                     SalaryResults(
                         hourly = Adjustments(
                             unadjusted = amount / hoursPerWeek * 52 / 12
@@ -370,7 +387,7 @@ class SalaryData {
                     )
                 }
 
-                PerAmount.Quarter -> {
+                PerAmount.Quarterly -> {
                     SalaryResults(
                         hourly = Adjustments(
                             unadjusted = amount * 4 / 52 / hoursPerWeek
@@ -399,7 +416,7 @@ class SalaryData {
                     )
                 }
 
-                PerAmount.Year -> {
+                PerAmount.Yearly -> {
                     SalaryResults(
                         hourly = Adjustments(
                             unadjusted = amount / 52 / hoursPerWeek
@@ -445,6 +462,18 @@ class SalaryData {
     }
 }
 
+/**
+ * Represents the salary results for different time periods.
+ *
+ * @property hourly The adjustments for hourly salary.
+ * @property daily The adjustments for daily salary.
+ * @property weekly The adjustments for weekly salary.
+ * @property biWeekly The adjustments for bi-weekly salary.
+ * @property semiMonthly The adjustments for semi-monthly salary.
+ * @property monthly The adjustments for monthly salary.
+ * @property quarterly The adjustments for quarterly salary.
+ * @property yearly The adjustments for yearly salary.
+ */
 data class SalaryResults(
     val hourly: Adjustments,
     val daily: Adjustments,
@@ -459,14 +488,14 @@ data class SalaryResults(
         .entries
         .map {
             it to when (it) {
-                PerAmount.Hour -> hourly
-                PerAmount.Day -> daily
-                PerAmount.Week -> weekly
-                PerAmount.BiWeek -> biWeekly
-                PerAmount.SemiMonth -> semiMonthly
-                PerAmount.Month -> monthly
-                PerAmount.Quarter -> quarterly
-                PerAmount.Year -> yearly
+                PerAmount.Hourly -> hourly
+                PerAmount.Daily -> daily
+                PerAmount.Weekly -> weekly
+                PerAmount.BiWeekly -> biWeekly
+                PerAmount.SemiMonthly -> semiMonthly
+                PerAmount.Monthly -> monthly
+                PerAmount.Quarterly -> quarterly
+                PerAmount.Yearly -> yearly
             }
         }
 }
@@ -477,12 +506,12 @@ data class Adjustments(
 )
 
 enum class PerAmount {
-    Hour,
-    Day,
-    Week,
-    BiWeek,
-    SemiMonth,
-    Month,
-    Quarter,
-    Year
+    Hourly,
+    Daily,
+    Weekly,
+    BiWeekly,
+    SemiMonthly,
+    Monthly,
+    Quarterly,
+    Yearly
 }
