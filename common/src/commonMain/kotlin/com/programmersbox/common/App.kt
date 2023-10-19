@@ -1,5 +1,8 @@
 package com.programmersbox.common
 
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.TwoWayConverter
+import androidx.compose.animation.core.animateValueAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -132,13 +135,23 @@ internal fun SalaryUI() {
                     }
                     item {
                         Text(
-                            numberFormatter.format(it.second.unadjusted),
+                            numberFormatter.format(
+                                animateValueAsState(
+                                    it.second.unadjusted,
+                                    DoubleConverter
+                                ).value
+                            ),
                             textAlign = TextAlign.Center
                         )
                     }
                     item {
                         Text(
-                            numberFormatter.format(it.second.adjusted),
+                            numberFormatter.format(
+                                animateValueAsState(
+                                    it.second.adjusted,
+                                    DoubleConverter
+                                ).value
+                            ),
                             textAlign = TextAlign.Center
                         )
                     }
@@ -147,6 +160,9 @@ internal fun SalaryUI() {
         }
     }
 }
+
+private val DoubleConverter =
+    TwoWayConverter<Double, AnimationVector1D>({ AnimationVector1D(it.toFloat()) }, { it.value.toDouble() })
 
 @Composable
 fun NumberField(
