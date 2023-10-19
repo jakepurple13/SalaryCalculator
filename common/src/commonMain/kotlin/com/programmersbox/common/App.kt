@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -66,12 +67,51 @@ internal fun SalaryUI() {
             TopAppBar(
                 title = { Text("Salary Calculator") }
             )
-        }
+        },
     ) { padding ->
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.padding(padding)
         ) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.padding(horizontal = 2.dp)
+            ) {
+                item {}
+                item { Text("Unadjusted", textAlign = TextAlign.Center) }
+                item { Text("Adjusted", textAlign = TextAlign.Center) }
+                salaryData.amounts.infoMap().forEach {
+                    item {
+                        Text(
+                            it.first.name,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    item {
+                        Text(
+                            numberFormatter.format(
+                                animateValueAsState(
+                                    it.second.unadjusted,
+                                    DoubleConverter
+                                ).value
+                            ),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    item {
+                        Text(
+                            numberFormatter.format(
+                                animateValueAsState(
+                                    it.second.adjusted,
+                                    DoubleConverter
+                                ).value
+                            ),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+
             Row(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
@@ -116,47 +156,9 @@ internal fun SalaryUI() {
                 salaryData.vacationDaysPerYear,
                 onValueChange = { salaryData.vacationDaysPerYear = it },
                 labelText = "Vacation Days per Year",
+                imeAction = ImeAction.Done,
                 modifier = Modifier.fillMaxWidth()
             )
-
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier.padding(horizontal = 2.dp)
-            ) {
-                item {}
-                item { Text("Unadjusted", textAlign = TextAlign.Center) }
-                item { Text("Adjusted", textAlign = TextAlign.Center) }
-                salaryData.amounts.infoMap().forEach {
-                    item {
-                        Text(
-                            it.first.name,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    item {
-                        Text(
-                            numberFormatter.format(
-                                animateValueAsState(
-                                    it.second.unadjusted,
-                                    DoubleConverter
-                                ).value
-                            ),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    item {
-                        Text(
-                            numberFormatter.format(
-                                animateValueAsState(
-                                    it.second.adjusted,
-                                    DoubleConverter
-                                ).value
-                            ),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            }
         }
     }
 }
@@ -166,20 +168,22 @@ private val DoubleConverter =
 
 @Composable
 fun NumberField(
-    value: Double?,
-    onValueChange: (Double?) -> Unit,
+    value: String,
+    onValueChange: (String) -> Unit,
     labelText: String,
     modifier: Modifier = Modifier,
     prefix: @Composable (() -> Unit)? = null,
 ) {
     OutlinedTextField(
-        value?.toString().orEmpty(),
-        onValueChange = { v -> onValueChange(v.toDoubleOrNull()) },
+        value,
+        onValueChange = onValueChange,
         label = { Text(labelText) },
         prefix = prefix,
         keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Decimal
+            keyboardType = KeyboardType.Decimal,
+            imeAction = ImeAction.Next
         ),
+        singleLine = true,
         modifier = modifier
     )
 }
@@ -191,6 +195,7 @@ fun NumberField(
     labelText: String,
     modifier: Modifier = Modifier,
     prefix: @Composable (() -> Unit)? = null,
+    imeAction: ImeAction = ImeAction.Next,
 ) {
     OutlinedTextField(
         value?.toString().orEmpty(),
@@ -198,269 +203,98 @@ fun NumberField(
         prefix = prefix,
         label = { Text(labelText) },
         keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Number
+            keyboardType = KeyboardType.Number,
+            imeAction = imeAction
         ),
+        singleLine = true,
         modifier = modifier
     )
 }
 
 class SalaryData {
     var perAmount by mutableStateOf(PerAmount.Hourly)
-    var amount by mutableStateOf<Double?>(50.0)
-    var hoursPerWeek by mutableStateOf<Double?>(40.0)
+    var amount by mutableStateOf("50")
+    var hoursPerWeek by mutableStateOf("40")
     var daysPerWeek by mutableStateOf<Int?>(5)
     var holidaysPerYear by mutableStateOf<Int?>(10)
     var vacationDaysPerYear by mutableStateOf<Int?>(15)
 
     val amounts by derivedStateOf {
         runCatching {
-            val amount = requireNotNull(amount)
-            val hoursPerWeek = requireNotNull(hoursPerWeek)
+            val amount = requireNotNull(amount.toDoubleOrNull())
+            val hoursPerWeek = requireNotNull(hoursPerWeek.toDoubleOrNull())
             val daysPerWeek = requireNotNull(daysPerWeek)
             val holidaysPerYear = requireNotNull(holidaysPerYear)
             val vacationDaysPerYear = requireNotNull(vacationDaysPerYear)
 
             val offDays = holidaysPerYear + vacationDaysPerYear
+            val weeksPerYear = 52.0
+            val monthsPerYear = 12.0
+            val quartersPerYear = 4.0
+
+            val weeklyHours = hoursPerWeek
+            val dailyHours = hoursPerWeek / daysPerWeek
+            val monthlyHours = weeklyHours * weeksPerYear / monthsPerYear
+            val quarterlyHours = weeklyHours * weeksPerYear / quartersPerYear
+
+            fun getSalaryResults(hourlyAmount: Double): SalaryResults {
+                val adjustedYear = hourlyAmount * weeklyHours * (weeksPerYear - offDays / 5)
+                return SalaryResults(
+                    hourly = Adjustments(
+                        unadjusted = hourlyAmount,
+                        //TODO: Work on this
+                        adjusted = adjustedYear / (weeksPerYear - offDays * 5)
+                    ),
+                    daily = Adjustments(
+                        unadjusted = hourlyAmount * dailyHours,
+                        adjusted = adjustedYear / 260
+                    ),
+                    weekly = Adjustments(
+                        unadjusted = hourlyAmount * weeklyHours,
+                        adjusted = adjustedYear / weeksPerYear
+                    ),
+                    biWeekly = Adjustments(
+                        unadjusted = hourlyAmount * weeklyHours * 2,
+                        adjusted = adjustedYear / weeksPerYear * 2
+                    ),
+                    semiMonthly = Adjustments(
+                        unadjusted = hourlyAmount * monthlyHours * monthsPerYear / 24,
+                        adjusted = adjustedYear / 24
+                    ),
+                    monthly = Adjustments(
+                        unadjusted = hourlyAmount * monthlyHours,
+                        adjusted = adjustedYear / monthsPerYear
+                    ),
+                    quarterly = Adjustments(
+                        unadjusted = hourlyAmount * quarterlyHours,
+                        adjusted = adjustedYear / quartersPerYear
+                    ),
+                    yearly = Adjustments(
+                        unadjusted = hourlyAmount * weeklyHours * weeksPerYear,
+                        adjusted = adjustedYear
+                    )
+                )
+            }
+
             when (perAmount) {
-                PerAmount.Hourly -> {
-                    SalaryResults(
-                        hourly = Adjustments(
-                            unadjusted = amount
-                        ),
-                        daily = Adjustments(
-                            unadjusted = amount * (hoursPerWeek / daysPerWeek)
-                        ),
-                        weekly = Adjustments(
-                            unadjusted = amount * hoursPerWeek
-                        ),
-                        biWeekly = Adjustments(
-                            unadjusted = amount * hoursPerWeek * 2
-                        ),
-                        semiMonthly = Adjustments(
-                            unadjusted = amount * hoursPerWeek * 52 / 24
-                        ),
-                        monthly = Adjustments(
-                            unadjusted = amount * hoursPerWeek * 52 / 12,
-                        ),
-                        quarterly = Adjustments(
-                            unadjusted = amount * hoursPerWeek * (52 / 4),
-                        ),
-                        yearly = Adjustments(
-                            unadjusted = amount * hoursPerWeek * 52,
-                            adjusted = amount * hoursPerWeek * (52 - offDays / 5)
-                        )
-                    )
-                }
+                PerAmount.Hourly -> getSalaryResults(amount)
 
-                PerAmount.Daily -> {
-                    SalaryResults(
-                        hourly = Adjustments(
-                            unadjusted = amount / (hoursPerWeek / daysPerWeek)
-                        ),
-                        daily = Adjustments(
-                            unadjusted = amount
-                        ),
-                        weekly = Adjustments(
-                            unadjusted = amount * daysPerWeek
-                        ),
-                        biWeekly = Adjustments(
-                            unadjusted = amount * daysPerWeek * 2
-                        ),
-                        semiMonthly = Adjustments(
-                            unadjusted = amount * daysPerWeek * 52 / 24
-                        ),
-                        monthly = Adjustments(
-                            unadjusted = amount * daysPerWeek * 52 / 12,
-                        ),
-                        quarterly = Adjustments(
-                            unadjusted = amount * daysPerWeek * (52 / 4),
-                        ),
-                        yearly = Adjustments(
-                            unadjusted = amount * daysPerWeek * 52,
-                            adjusted = amount * daysPerWeek * (52 - offDays / 5)
-                        )
-                    )
-                }
+                PerAmount.Daily -> getSalaryResults(amount / dailyHours)
 
-                PerAmount.Weekly -> {
-                    SalaryResults(
-                        hourly = Adjustments(
-                            unadjusted = amount / hoursPerWeek
-                        ),
-                        daily = Adjustments(
-                            unadjusted = amount / daysPerWeek
-                        ),
-                        weekly = Adjustments(
-                            unadjusted = amount
-                        ),
-                        biWeekly = Adjustments(
-                            unadjusted = amount * 2
-                        ),
-                        semiMonthly = Adjustments(
-                            unadjusted = amount * 52 / 24
-                        ),
-                        monthly = Adjustments(
-                            unadjusted = amount * 52 / 12,
-                        ),
-                        quarterly = Adjustments(
-                            unadjusted = amount * (52 / 4),
-                        ),
-                        yearly = Adjustments(
-                            unadjusted = amount * 52,
-                            adjusted = amount * (52 - offDays / 5)
-                        )
-                    )
-                }
+                PerAmount.Weekly -> getSalaryResults(amount / weeklyHours)
 
-                PerAmount.BiWeekly -> {
-                    SalaryResults(
-                        hourly = Adjustments(
-                            unadjusted = amount / 2 / hoursPerWeek
-                        ),
-                        daily = Adjustments(
-                            unadjusted = amount / 2 / daysPerWeek
-                        ),
-                        weekly = Adjustments(
-                            unadjusted = amount / 2
-                        ),
-                        biWeekly = Adjustments(
-                            unadjusted = amount
-                        ),
-                        semiMonthly = Adjustments(
-                            unadjusted = amount / 2 * 52 / 24
-                        ),
-                        monthly = Adjustments(
-                            unadjusted = amount * 52 / 24,
-                        ),
-                        quarterly = Adjustments(
-                            unadjusted = amount / 2 * (52 / 4),
-                        ),
-                        yearly = Adjustments(
-                            unadjusted = amount / 2 * 52,
-                            adjusted = amount / 2 * (52 - offDays / 5)
-                        )
-                    )
-                }
+                PerAmount.BiWeekly -> getSalaryResults(amount / 2 / weeklyHours)
 
                 PerAmount.SemiMonthly -> {
-                    val hourly = amount / (hoursPerWeek * 52 / 24)
-                    SalaryResults(
-                        hourly = Adjustments(
-                            unadjusted = hourly
-                        ),
-                        daily = Adjustments(
-                            unadjusted = hourly * (hoursPerWeek / daysPerWeek)
-                        ),
-                        weekly = Adjustments(
-                            unadjusted = hourly * hoursPerWeek
-                        ),
-                        biWeekly = Adjustments(
-                            unadjusted = hourly * hoursPerWeek * 2
-                        ),
-                        semiMonthly = Adjustments(
-                            unadjusted = amount
-                        ),
-                        monthly = Adjustments(
-                            unadjusted = amount * 2,
-                        ),
-                        quarterly = Adjustments(
-                            unadjusted = hourly * hoursPerWeek * (52 / 4),
-                        ),
-                        yearly = Adjustments(
-                            unadjusted = hourly * hoursPerWeek * 52,
-                            adjusted = hourly * hoursPerWeek * (52 - offDays / 5)
-                        )
-                    )
+                    val hourly = amount / monthlyHours * monthsPerYear / 24
+                    getSalaryResults(hourly)
                 }
 
-                PerAmount.Monthly -> {
-                    SalaryResults(
-                        hourly = Adjustments(
-                            unadjusted = amount / hoursPerWeek * 52 / 12
-                        ),
-                        daily = Adjustments(
-                            unadjusted = amount / 4 * (hoursPerWeek / daysPerWeek)
-                        ),
-                        weekly = Adjustments(
-                            unadjusted = amount / 4 * hoursPerWeek
-                        ),
-                        biWeekly = Adjustments(
-                            unadjusted = amount / 2 * hoursPerWeek * 2
-                        ),
-                        semiMonthly = Adjustments(
-                            unadjusted = amount / 2 * hoursPerWeek * 52 / 12
-                        ),
-                        monthly = Adjustments(
-                            unadjusted = amount,
-                        ),
-                        quarterly = Adjustments(
-                            unadjusted = amount * hoursPerWeek * (52 / 4),
-                        ),
-                        yearly = Adjustments(
-                            unadjusted = amount * hoursPerWeek * 52,
-                            adjusted = amount * hoursPerWeek * (52 - offDays / 5)
-                        )
-                    )
-                }
+                PerAmount.Monthly -> getSalaryResults(amount / monthlyHours)
 
-                PerAmount.Quarterly -> {
-                    SalaryResults(
-                        hourly = Adjustments(
-                            unadjusted = amount * 4 / 52 / hoursPerWeek
-                        ),
-                        daily = Adjustments(
-                            unadjusted = amount * 4 / 260
-                        ),
-                        weekly = Adjustments(
-                            unadjusted = amount * 4 / 52,
-                        ),
-                        biWeekly = Adjustments(
-                            unadjusted = amount * 4 / 26,
-                        ),
-                        semiMonthly = Adjustments(
-                            unadjusted = amount * 4 / 24
-                        ),
-                        monthly = Adjustments(
-                            unadjusted = amount * 4 / 12,
-                        ),
-                        quarterly = Adjustments(
-                            unadjusted = amount,
-                        ),
-                        yearly = Adjustments(
-                            unadjusted = amount * 4,
-                        )
-                    )
-                }
+                PerAmount.Quarterly -> getSalaryResults(amount / quarterlyHours)
 
-                PerAmount.Yearly -> {
-                    SalaryResults(
-                        hourly = Adjustments(
-                            unadjusted = amount / 52 / hoursPerWeek
-                        ),
-                        daily = Adjustments(
-                            unadjusted = amount / 260
-                        ),
-                        weekly = Adjustments(
-                            unadjusted = amount / 52,
-                        ),
-                        biWeekly = Adjustments(
-                            unadjusted = amount / 26,
-                        ),
-                        semiMonthly = Adjustments(
-                            unadjusted = amount / 24
-                        ),
-                        monthly = Adjustments(
-                            unadjusted = amount / 12,
-                        ),
-                        quarterly = Adjustments(
-                            unadjusted = amount / 4,
-                        ),
-                        yearly = Adjustments(
-                            unadjusted = amount,
-                            adjusted = amount / 52 / hoursPerWeek * hoursPerWeek * (52 - offDays / 5)
-                        )
-                    )
-                }
+                PerAmount.Yearly -> getSalaryResults(amount / weeklyHours / weeksPerYear)
             }
         }
             .getOrDefault(
