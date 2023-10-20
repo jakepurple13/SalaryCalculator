@@ -242,8 +242,7 @@ class SalaryData {
                 return SalaryResults(
                     hourly = Adjustments(
                         unadjusted = hourlyAmount,
-                        //TODO: Work on this
-                        adjusted = adjustedYear / (weeksPerYear - offDays * 5)
+                        adjusted = adjustedYear / 260 / dailyHours
                     ),
                     daily = Adjustments(
                         unadjusted = hourlyAmount * dailyHours,
